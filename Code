@@ -19,7 +19,6 @@ newgrp docker
 sudo systemctl start docker
 docker-compose up -d
 
-
 -- Data loading in MySQL 
 docker cp "Walmart_Store_sales.csv" ra_mysql:Walmart_Store_sales.csv
 docker exec -it ra_mysql bash
@@ -38,18 +37,15 @@ sqoop job --exec retail_job
 password: example
 
 -- Login into the Hive docker container
-
 docker exec -i -t ra_hive-server bash
  
 -- Verifying the data ingested using SQOOP job
- 
 hive
 show tables;
 select * from raw_sales;
 exit;
 
 -- Using Hive docker container for Data Analysis.
-
 beeline
 !connect jdbc:hive2://127.0.0.1:10000 scott tiger
 create database if not exists retail;

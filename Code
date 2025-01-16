@@ -1,0 +1,68 @@
+-- Connecting to EC2 via ssh 
+ssh -i "Retail.pem" ec2-user@ec2-51-20-69-211.eu-north-1.compute.amazonaws.com
+
+-- Port forwarding
+ssh -i "Retail.pem" ec2-user@ec2-51-20-69-211.eu-north-1.compute.amazonaws.com -L 2081:localhost:2041 -L 4888:localhost:4888 -L 2080:localhost:2080 -L 8050:localhost:8050 -L 4141:localhost:4141
+
+-- Copying files from local to EC2
+scp -r -i "Retail.pem" "local files location" ec2-user@ec2-51-20-69-211.eu-north-1.compute.amazonaws.com:/home/ec2-user
+
+-- Commands to install Docker
+sudo yum update -y
+sudo yum install docker
+sudo curl -L "https://github.com/docker/compose/releases/download/1.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose</code> <code><br/>
+sudo chmod +x /usr/local/bin/docker-compose</code> <code><br/>
+sudo gpasswd -a $$(uname -m)" -o /usr/local/bin/docker-compose</code> <code><br/>
+sudo chmod +x /usr/local/bin/docker-compose</code> <code><br/>
+sudo gpasswd -a $USER docker
+newgrp docker
+sudo systemctl start docker
+docker-compose up -d
+
+
+-- Data loading in MySQL 
+docker cp "Walmart_Store_sales.csv" ra_mysql:Walmart_Store_sales.csv
+docker exec -it ra_mysql bash
+mysql -p
+SET GLOBAL local_infile=1;
+mysql --local-infile=1 -p
+CREATE DATABASE if not exists retail;
+use retail;
+CREATE TABLE if not exists walmart_sales (Store VARCHAR(255),Date Date,Weekly_Sales VARCHAR(255),Holiday_Flag VARCHAR(255),Temperature VARCHAR(255),Fuel_Price VARCHAR(255),CPI VARCHAR(255),Unemployment VARCHAR(255));
+show tables;
+LOAD DATA LOCAL INFILE '/Walmart_Store_sales.csv' INTO TABLE walmart_sales FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n' IGNORE 1 ROWS (Store,@Date,Weekly_Sales,Holiday_Flag,Temperature,Fuel_Price,CPI,Unemployment) SET Date=STR_TO_DATE( @Date, '%d-%m-%Y' );
+
+-- Importing job creation using Sqoop for ingesting data
+sqoop job --create retail_job -- import --connect jdbc:mysql://mysql:3306/retail --username root --password example --table walmart_sales --fields-terminated-by "," --hive-import --hive-table raw_sales --hive-overwrite --m 1 --incremental append --check-column Date --last-value '1900-01-01'
+sqoop job --exec retail_job
+password: example
+
+-- Login into the Hive docker container
+
+docker exec -i -t ra_hive-server bash
+ 
+-- Verifying the data ingested using SQOOP job
+ 
+hive
+show tables;
+select * from raw_sales;
+exit;
+
+-- Using Hive docker container for Data Analysis.
+
+beeline
+!connect jdbc:hive2://127.0.0.1:10000 scott tiger
+create database if not exists retail;
+use retail;
+
+create table walmart_sales as 
+select 
+cast(Store as int),
+cast(to_date(from_unixtime(unix_timestamp(`Date`, 'yyyy-MM-dd'))) as date) as date_of_entry,
+cast(Weekly_Sales as double),
+Holiday_Flag,
+cast(Temperature as float),
+cast(fuel_price as float),
+cast(cpi as double),
+cast(Unemployment as float)
+from default.raw_sales;
